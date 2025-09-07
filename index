@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสถิติเงินรูป</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+        body { font-family: 'Kanit', sans-serif; }
+        .card {
+            background: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .simple-bg {
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+        .income-item {
+            transition: all 0.2s ease;
+        }
+        .income-item:hover {
+            background-color: #f8fafc;
+        }
+        .action-btn {
+            opacity: 0;
+            transition: all 0.2s ease;
+        }
+        .income-item:hover .action-btn {
+            opacity: 1;
+        }
+        @media (max-width: 640px) {
+            .action-btn {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body class="simple-bg p-4">
+    <div class="container mx-auto max-w-md">
+
+        
+        <!-- แสดงจำนวนเงินรวม -->
+        <div class="card rounded-2xl p-6 mb-6">
+            <div class="text-center">
+                <div class="text-3xl mb-3">💵</div>
+                <h2 class="text-lg text-gray-600 mb-2">รายได้รวมทั้งหมด</h2>
+                <div id="totalIncome" class="text-3xl font-bold text-green-600 mb-6">
+                    0 บาท
+                </div>
+                <button id="addIncomeBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 w-full" onclick="openModal()">
+                    <i class="fas fa-plus mr-2"></i>เพิ่มรายได้
+                </button>
+            </div>
+        </div>
+
+        <!-- แสดงประวัติรายได้ -->
+        <div class="card rounded-2xl p-6">
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-700">
+                    <i class="fas fa-history mr-2"></i>ประวัติรายได้
+                </h2>
+            </div>
+            
+            <div id="incomeHistory" class="space-y-3">
+                <div class="text-center text-gray-500 py-8">
+                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>กำลังโหลดข้อมูล...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal เพิ่มข้อมูลรายได้ -->
+    <div id="addIncomeModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <div class="text-center mb-6">
+                <div class="text-3xl mb-2">💵</div>
+                <h3 class="text-lg font-medium text-gray-700">เพิ่มข้อมูลรายได้</h3>
+            </div>
+            
+            <form id="incomeForm" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">วันเดือนปี</label>
+                    <input type="date" id="incomeDate" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                </div>
+                
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">รายได้ต่อเดือน (บาท)</label>
+                    <input type="number" id="incomeAmount" placeholder="0" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" required min="0" step="0.01">
+                </div>
+                
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" id="cancelBtn" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 rounded-xl font-medium transition-all duration-300" onclick="closeModal()">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-medium transition-all duration-300">
+                        <i class="fas fa-save mr-1"></i>บันทึกรายได้
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal แก้ไขข้อมูลรายได้ -->
+    <div id="editIncomeModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <div class="text-center mb-6">
+                <div class="text-3xl mb-2">✏️</div>
+                <h3 class="text-lg font-medium text-gray-700">แก้ไขข้อมูลรายได้</h3>
+            </div>
+            
+            <form id="editIncomeForm" class="space-y-4">
+                <input type="hidden" id="editIncomeId">
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">วันเดือนปี</label>
+                    <input type="date" id="editIncomeDate" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                </div>
+                
+                <div>
+                    <label class="block text-gray-700 font-medium mb-2">รายได้ต่อเดือน (บาท)</label>
+                    <input type="number" id="editIncomeAmount" placeholder="0" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent" required min="0" step="0.01">
+                </div>
+                
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" id="cancelEditBtn" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-3 rounded-xl font-medium transition-all duration-300" onclick="closeEditModal()">
+                        ยกเลิก
+                    </button>
+                    <button type="submit" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-medium transition-all duration-300">
+                        <i class="fas fa-save mr-1"></i>บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyK7BR0zg4IMEMWjiluqrW-Nv0x-jGF402liFLpx5wrtF2AeSpv0IHjhvblpoGD9GLXoQ/exec';
+        
+        // JSONP callback function
+        window.handleResponse = function(data) {
+            if (data.success) {
+                if (data.action === 'getData') {
+                    displayIncomeData(data.data);
+                } else if (data.action === 'addData') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'บันทึกสำเร็จ!',
+                        text: 'ข้อมูลรายได้ถูกบันทึกลง Google Sheet เรียบร้อยแล้ว',
+                        confirmButtonColor: '#10B981'
+                    });
+                    closeModal();
+                    loadIncomeData();
+                } else if (data.action === 'updateData') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'แก้ไขสำเร็จ!',
+                        text: 'ข้อมูลรายได้ถูกแก้ไขเรียบร้อยแล้ว',
+                        confirmButtonColor: '#10B981'
+                    });
+                    closeEditModal();
+                    loadIncomeData();
+                }
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด!',
+                    text: data.message || 'ไม่สามารถดำเนินการได้',
+                    confirmButtonColor: '#EF4444'
+                });
+            }
+        };
+
+        // JSONP request function
+        function makeJSONPRequest(url, params = {}) {
+            const script = document.createElement('script');
+            const callbackName = 'handleResponse';
+            
+            const queryString = Object.keys(params)
+                .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+                .join('&');
+            
+            script.src = `${url}?callback=${callbackName}&${queryString}`;
+            document.head.appendChild(script);
+            
+            script.onload = () => {
+                document.head.removeChild(script);
+            };
+        }
+
+        // Load income data
+        function loadIncomeData() {
+            makeJSONPRequest(SCRIPT_URL, { action: 'getData' });
+        }
+
+        // Display income data
+        function displayIncomeData(data) {
+            let totalIncome = 0;
+            let historyHTML = '';
+
+            if (data && data.length > 0) {
+                // Sort data by original order (newest entries first - as they appear in the sheet)
+                // This ensures recently added data appears at the top
+                data.reverse();
+                
+                // Calculate total income from all data
+                data.forEach(item => {
+                    totalIncome += parseFloat(item.income) || 0;
+                });
+                
+                // Display only first 12 items
+                const displayData = data.slice(0, 12);
+                
+                displayData.forEach((item, displayIndex) => {
+                    const amount = parseFloat(item.income) || 0;
+                    const originalIndex = data.indexOf(item);
+                    
+                    const formattedDate = new Date(item.date).toLocaleDateString('th-TH', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                    });
+                    
+                    historyHTML += `
+                        <div class="income-item bg-gray-50 rounded-xl p-4 flex justify-between items-center">
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-800">${formattedDate}</div>
+                                <div class="text-sm text-gray-500">รายได้ประจำเดือน</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-lg font-bold text-green-600">${amount.toLocaleString()} บาท</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                // Show "show more" message if there are more than 12 items
+                if (data.length > 12) {
+                    historyHTML += `
+                        <div class="text-center text-gray-500 py-4 text-sm">
+                            แสดง 12 รายการล่าสุด จากทั้งหมด ${data.length} รายการ
+                        </div>
+                    `;
+                }
+            } else {
+                historyHTML = `
+                    <div class="text-center text-gray-500 py-12">
+                        <div class="text-4xl mb-4">💵</div>
+                        <p class="text-lg mb-2">ยังไม่มีข้อมูลรายได้</p>
+                        <p class="text-sm">เริ่มต้นโดยการเพิ่มข้อมูลรายได้แรกของคุณ</p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()} บาท`;
+            document.getElementById('incomeHistory').innerHTML = historyHTML;
+        }
+
+        // Open modal
+        function openModal() {
+            console.log('Opening modal...');
+            const modal = document.getElementById('addIncomeModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // Set default date to today
+            document.getElementById('incomeDate').value = new Date().toISOString().split('T')[0];
+        }
+
+        // Close modal
+        function closeModal() {
+            const modal = document.getElementById('addIncomeModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('incomeForm').reset();
+        }
+
+        // Close edit modal
+        function closeEditModal() {
+            const modal = document.getElementById('editIncomeModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('editIncomeForm').reset();
+        }
+
+        // Edit income function
+        function editIncome(index, date, amount) {
+            document.getElementById('editIncomeId').value = index;
+            document.getElementById('editIncomeDate').value = new Date(date).toISOString().split('T')[0];
+            document.getElementById('editIncomeAmount').value = amount;
+            
+            const modal = document.getElementById('editIncomeModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+
+
+        // Close modal when clicking outside
+        document.getElementById('addIncomeModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('addIncomeModal')) {
+                closeModal();
+            }
+        });
+
+        document.getElementById('editIncomeModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('editIncomeModal')) {
+                closeEditModal();
+            }
+        });
+
+        // Form submission
+        document.getElementById('incomeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const date = document.getElementById('incomeDate').value;
+            const amount = document.getElementById('incomeAmount').value;
+
+            if (!date || !amount) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'กรุณากรอกข้อมูลให้ครบถ้วน',
+                    text: 'กรุณาเลือกวันเดือนปีและใส่จำนวนรายได้',
+                    confirmButtonColor: '#F59E0B'
+                });
+                return;
+            }
+
+            // Show loading
+            Swal.fire({
+                title: 'กำลังบันทึกข้อมูลลง Google Sheet...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Send data to Google Sheet
+            makeJSONPRequest(SCRIPT_URL, {
+                action: 'addData',
+                date: date,
+                income: amount
+            });
+        });
+
+        // Edit form submission
+        document.getElementById('editIncomeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const index = document.getElementById('editIncomeId').value;
+            const date = document.getElementById('editIncomeDate').value;
+            const amount = document.getElementById('editIncomeAmount').value;
+
+            if (!date || !amount) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'กรุณากรอกข้อมูลให้ครบถ้วน',
+                    confirmButtonColor: '#F59E0B'
+                });
+                return;
+            }
+
+            // Show loading
+            Swal.fire({
+                title: 'กำลังแก้ไขข้อมูล...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Send data
+            makeJSONPRequest(SCRIPT_URL, {
+                action: 'updateData',
+                index: index,
+                date: date,
+                income: amount
+            });
+        });
+
+        // Load data on page load and set auto refresh
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, loading income data...');
+            loadIncomeData();
+            
+            // Auto refresh every 30 seconds
+            setInterval(() => {
+                loadIncomeData();
+            }, 30000);
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b573a0d5a099a9',t:'MTc1NzI0MDE5Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
