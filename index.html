@@ -139,10 +139,13 @@
     <script>
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyK7BR0zg4IMEMWjiluqrW-Nv0x-jGF402liFLpx5wrtF2AeSpv0IHjhvblpoGD9GLXoQ/exec';
         
-        // JSONP callback function
+        // JSONP callback function with caching
         window.handleResponse = function(data) {
             if (data.success) {
                 if (data.action === 'getData') {
+                    // Update cache
+                    dataCache = data.data;
+                    lastLoadTime = Date.now();
                     displayIncomeData(data.data);
                 } else if (data.action === 'addData') {
                     Swal.fire({
@@ -153,7 +156,8 @@
                     });
                     closeModal();
                     currentPage = 1; // Reset to first page when adding new data
-                    loadIncomeData();
+                    dataCache = null; // Clear cache to force refresh
+                    loadIncomeData(true);
                 } else if (data.action === 'updateData') {
                     Swal.fire({
                         icon: 'success',
@@ -162,7 +166,8 @@
                         confirmButtonColor: '#10B981'
                     });
                     closeEditModal();
-                    loadIncomeData();
+                    dataCache = null; // Clear cache to force refresh
+                    loadIncomeData(true);
                 }
             } else {
                 Swal.fire({
@@ -191,8 +196,31 @@
             };
         }
 
-        // Load income data
-        function loadIncomeData() {
+        // Load income data with caching
+        let dataCache = null;
+        let lastLoadTime = 0;
+        const CACHE_DURATION = 10000; // 10 seconds cache
+
+        function loadIncomeData(forceRefresh = false) {
+            const now = Date.now();
+            
+            // Use cache if available and not expired
+            if (!forceRefresh && dataCache && (now - lastLoadTime) < CACHE_DURATION) {
+                displayIncomeData(dataCache);
+                return;
+            }
+            
+            // Show minimal loading state
+            const historyContainer = document.getElementById('incomeHistory');
+            if (!dataCache) {
+                historyContainer.innerHTML = `
+                    <div class="text-center text-gray-500 py-4">
+                        <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                        <p class="mt-2 text-sm">กำลังโหลด...</p>
+                    </div>
+                `;
+            }
+            
             makeJSONPRequest(SCRIPT_URL, { action: 'getData' });
         }
 
@@ -201,83 +229,100 @@
         const itemsPerPage = 12;
         let allIncomeData = [];
 
-        // Display income data
+        // Display income data with performance optimization
         function displayIncomeData(data) {
-            allIncomeData = data || [];
-            let totalIncome = 0;
-            let historyHTML = '';
+            // Show loading immediately
+            const historyContainer = document.getElementById('incomeHistory');
+            const totalIncomeElement = document.getElementById('totalIncome');
+            
+            // Use requestAnimationFrame for smooth rendering
+            requestAnimationFrame(() => {
+                allIncomeData = data || [];
+                let totalIncome = 0;
 
-            if (allIncomeData && allIncomeData.length > 0) {
-                // Sort data by original order (newest entries first - as they appear in the sheet)
-                // This ensures recently added data appears at the top
-                allIncomeData.reverse();
-                
-                // Calculate total income from all data
-                allIncomeData.forEach(item => {
-                    totalIncome += parseFloat(item.income) || 0;
-                });
-                
-                // Calculate pagination
-                const totalPages = Math.ceil(allIncomeData.length / itemsPerPage);
-                const startIndex = (currentPage - 1) * itemsPerPage;
-                const endIndex = startIndex + itemsPerPage;
-                const displayData = allIncomeData.slice(startIndex, endIndex);
-                
-                displayData.forEach((item, displayIndex) => {
-                    const amount = parseFloat(item.income) || 0;
-                    const originalIndex = allIncomeData.indexOf(item);
+                if (allIncomeData && allIncomeData.length > 0) {
+                    // Sort data by original order (newest entries first)
+                    allIncomeData.reverse();
                     
-                    const formattedDate = new Date(item.date).toLocaleDateString('th-TH', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                    });
+                    // Calculate total income efficiently
+                    totalIncome = allIncomeData.reduce((sum, item) => sum + (parseFloat(item.income) || 0), 0);
                     
-                    historyHTML += `
-                        <div class="income-item bg-gray-50 rounded-xl p-4 flex justify-between items-center">
-                            <div class="flex-1">
-                                <div class="font-medium text-gray-800">${formattedDate}</div>
-                                <div class="text-sm text-gray-500">รายได้ประจำเดือน</div>
+                    // Update total immediately
+                    totalIncomeElement.textContent = `${totalIncome.toLocaleString()} บาท`;
+                    
+                    // Calculate pagination
+                    const totalPages = Math.ceil(allIncomeData.length / itemsPerPage);
+                    const startIndex = (currentPage - 1) * itemsPerPage;
+                    const endIndex = startIndex + itemsPerPage;
+                    const displayData = allIncomeData.slice(startIndex, endIndex);
+                    
+                    // Create document fragment for better performance
+                    const fragment = document.createDocumentFragment();
+                    const tempDiv = document.createElement('div');
+                    tempDiv.className = 'space-y-3';
+                    
+                    // Build HTML more efficiently
+                    const itemsHTML = displayData.map(item => {
+                        const amount = parseFloat(item.income) || 0;
+                        const formattedDate = new Date(item.date).toLocaleDateString('th-TH', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                        });
+                        
+                        return `
+                            <div class="income-item bg-gray-50 rounded-xl p-4 flex justify-between items-center">
+                                <div class="flex-1">
+                                    <div class="font-medium text-gray-800">${formattedDate}</div>
+                                    <div class="text-sm text-gray-500">รายได้ประจำเดือน</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-lg font-bold text-green-600">${amount.toLocaleString()} บาท</div>
+                                </div>
                             </div>
-                            <div class="text-right">
-                                <div class="text-lg font-bold text-green-600">${amount.toLocaleString()} บาท</div>
+                        `;
+                    }).join('');
+                    
+                    tempDiv.innerHTML = itemsHTML;
+                    
+                    // Add pagination if needed
+                    if (totalPages > 1) {
+                        const paginationHTML = `
+                            <div class="flex justify-between items-center pt-4 border-t border-gray-200 mt-4">
+                                <button onclick="previousPage()" ${currentPage === 1 ? 'disabled' : ''} 
+                                    class="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} transition-all">
+                                    <i class="fas fa-chevron-left mr-1"></i>ก่อนหน้า
+                                </button>
+                                
+                                <div class="text-xs text-gray-700 text-center">
+                                    หน้า ${currentPage}/${totalPages}<br>
+                                    <span class="text-gray-500">(${allIncomeData.length} รายการ)</span>
+                                </div>
+                                
+                                <button onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''} 
+                                    class="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} transition-all">
+                                    ถัดไป<i class="fas fa-chevron-right ml-1"></i>
+                                </button>
                             </div>
-                        </div>
-                    `;
-                });
-                
-                // Add pagination controls if there are more than 12 items
-                if (totalPages > 1) {
-                    historyHTML += `
-                        <div class="flex justify-between items-center pt-4 border-t border-gray-200 mt-4">
-                            <button onclick="previousPage()" ${currentPage === 1 ? 'disabled' : ''} 
-                                class="flex items-center px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}">
-                                <i class="fas fa-chevron-left mr-2"></i>ก่อนหน้า
-                            </button>
-                            
-                            <div class="text-sm text-gray-700">
-                                หน้า ${currentPage} จาก ${totalPages} (${allIncomeData.length} รายการ)
-                            </div>
-                            
-                            <button onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''} 
-                                class="flex items-center px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}">
-                                ถัดไป<i class="fas fa-chevron-right ml-2"></i>
-                            </button>
+                        `;
+                        tempDiv.innerHTML += paginationHTML;
+                    }
+                    
+                    // Replace content in one operation
+                    historyContainer.innerHTML = '';
+                    historyContainer.appendChild(tempDiv);
+                    
+                } else {
+                    totalIncomeElement.textContent = '0 บาท';
+                    historyContainer.innerHTML = `
+                        <div class="text-center text-gray-500 py-12">
+                            <div class="text-4xl mb-4">💵</div>
+                            <p class="text-lg mb-2">ยังไม่มีข้อมูลรายได้</p>
+                            <p class="text-sm">เริ่มต้นโดยการเพิ่มข้อมูลรายได้แรกของคุณ</p>
                         </div>
                     `;
                 }
-            } else {
-                historyHTML = `
-                    <div class="text-center text-gray-500 py-12">
-                        <div class="text-4xl mb-4">💵</div>
-                        <p class="text-lg mb-2">ยังไม่มีข้อมูลรายได้</p>
-                        <p class="text-sm">เริ่มต้นโดยการเพิ่มข้อมูลรายได้แรกของคุณ</p>
-                    </div>
-                `;
-            }
-
-            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()} บาท`;
-            document.getElementById('incomeHistory').innerHTML = historyHTML;
+            });
         }
 
         // Pagination functions
@@ -417,16 +462,26 @@
             });
         });
 
-        // Load data on page load and set auto refresh
+        // Optimized page loading
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Page loaded, loading income data...');
+            
+            // Load data immediately
             loadIncomeData();
             
-            // Auto refresh every 30 seconds
+            // Reduced auto refresh to 60 seconds for better performance
             setInterval(() => {
                 loadIncomeData();
-            }, 30000);
+            }, 60000);
+            
+            // Add visibility change listener for better mobile performance
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    // Refresh when user returns to tab
+                    loadIncomeData();
+                }
+            });
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97bd801fc11afcef',t:'MTc1NzMyNDU5Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97bd8e5524dcfd96',t:'MTc1NzMyNTE3Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
